@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF发票合并助手</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        body {
+            font-family: "Microsoft YaHei", sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .upload-area {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .upload-area:hover {
+            border-color: #66afe9;
+            background-color: #f0f7fd;
+        }
+        
+        .file-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 70%;
+        }
+        
+        .remove-btn {
+            color: #dc3545;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 5px 10px;
+            font-size: 14px;
+        }
+        
+        .remove-btn:hover {
+            text-decoration: underline;
+        }
+        
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 10px 15px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        
+        .btn:hover {
+            background-color: #3367d6;
+        }
+        
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        .status.success {
+            display: block;
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            display: block;
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        progress {
+            width: 100%;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .dragover {
+            border-color: #4285f4;
+            background-color: #e8f0fe;
+        }
+        
+        .instructions {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            border-left: 4px solid #4285f4;
+        }
+        
+        .instructions h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF发票合并助手</h1>
+        
+        <div id="upload-area" class="upload-area">
+            <p><strong>拖放PDF文件到这里</strong><br>或者<br>点击选择文件</p>
+            <input type="file" id="file-input" multiple accept=".pdf" style="display: none;">
+        </div>
+        
+        <div class="file-list" id="file-list">
+            <p id="no-files">暂无文件，请先上传PDF发票</p>
+        </div>
+        
+        <button id="merge-btn" class="btn" disabled>合并PDF文件</button>
+        <button id="clear-btn" class="btn" style="background-color: #dc3545; margin-top: 10px;" disabled>清除所有文件</button>
+        
+        <progress id="progress-bar" value="0" max="100"></progress>
+        <div id="status" class="status"></div>
+        
+        <div class="instructions">
+            <h3>使用说明：</h3>
+            <ol>
+                <li>点击或拖放文件到上方区域，选择需要合并的PDF发票文件</li>
+                <li>您可以调整文件顺序（拖放文件条目）</li>
+                <li>点击"合并PDF文件"按钮，系统会将所有PDF文件合并成一个</li>
+                <li>合并完成后，系统会自动下载合并后的PDF文件</li>
+                <li>合并后的文件保留了原始PDF的所有格式，方便一次性打印</li>
+            </ol>
+            <p><strong>注意：</strong>所有操作在您的浏览器本地完成，文件不会上传到任何服务器，保证数据安全。</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const uploadArea = document.getElementById('upload-area');
+            const fileInput = document.getElementById('file-input');
+            const fileList = document.getElementById('file-list');
+            const noFilesMsg = document.getElementById('no-files');
+            const mergeBtn = document.getElementById('merge-btn');
+            const clearBtn = document.getElementById('clear-btn');
+            const progressBar = document.getElementById('progress-bar');
+            const statusDiv = document.getElementById('status');
+            
+            // 存储文件的数组
+            let files = [];
+            
+            // 点击上传区域触发文件选择
+            uploadArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            // 拖放相关事件
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, () => {
+                    uploadArea.classList.add('dragover');
+                }, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, () => {
+                    uploadArea.classList.remove('dragover');
+                }, false);
+            });
+            
+            uploadArea.addEventListener('drop', handleDrop, false);
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const newFiles = dt.files;
+                handleFiles(newFiles);
+            }
+            
+            // 文件选择事件
+            fileInput.addEventListener('change', (e) => {
+                handleFiles(e.target.files);
+            });
+            
+            // 处理选择的文件
+            function handleFiles(newFiles) {
+                if (newFiles.length === 0) return;
+                
+                const pdfFiles = Array.from(newFiles).filter(file => {
+                    return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+                });
+                
+                if (pdfFiles.length === 0) {
+                    showStatus('请只上传PDF文件', 'error');
+                    return;
+                }
+                
+                // 添加到文件列表
+                pdfFiles.forEach(file => {
+                    if (!files.some(f => f.name === file.name && f.size === file.size)) {
+                        files.push(file);
+                    }
+                });
+                
+                updateFileList();
+                updateButtons();
+            }
+            
+            // 更新文件列表显示
+            function updateFileList() {
+                fileList.innerHTML = '';
+                
+                if (files.length === 0) {
+                    fileList.appendChild(noFilesMsg);
+                    return;
+                }
+                
+                files.forEach((file, index) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.draggable = true;
+                    fileItem.dataset.index = index;
+                    
+                    const fileName = document.createElement('div');
+                    fileName.className = 'file-name';
+                    fileName.textContent = `${index + 1}. ${file.name} (${formatFileSize(file.size)})`;
+                    
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'remove-btn';
+                    removeBtn.textContent = '删除';
+                    removeBtn.onclick = () => {
+                        files.splice(index, 1);
+                        updateFileList();
+                        updateButtons();
+                    };
+                    
+                    fileItem.appendChild(fileName);
+                    fileItem.appendChild(removeBtn);
+                    fileList.appendChild(fileItem);
+                    
+                    // 添加拖放排序功能
+                    fileItem.addEventListener('dragstart', handleDragStart);
+                    fileItem.addEventListener('dragover', handleDragOver);
+                    fileItem.addEventListener('drop', handleItemDrop);
+                    fileItem.addEventListener('dragend', handleDragEnd);
+                });
+            }
+            
+            // 文件大小格式化
+            function formatFileSize(bytes) {
+                if (bytes < 1024) {
+                    return bytes + ' B';
+                } else if (bytes < 1048576) {
+                    return (bytes / 1024).toFixed(2) + ' KB';
+                } else {
+                    return (bytes / 1048576).toFixed(2) + ' MB';
+                }
+            }
+            
+            // 拖放排序相关函数
+            let dragSrcEl = null;
+            
+            function handleDragStart(e) {
+                dragSrcEl = this;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', this.dataset.index);
+                this.style.opacity = '0.4';
+            }
+            
+            function handleDragOver(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                return false;
+            }
+            
+            function handleItemDrop(e) {
+                e.stopPropagation();
+                
+                if (dragSrcEl !== this) {
+                    const fromIndex = parseInt(dragSrcEl.dataset.index);
+                    const toIndex = parseInt(this.dataset.index);
+                    
+                    // 重新排序文件数组
+                    const temp = files[fromIndex];
+                    
+                    if (fromIndex < toIndex) {
+                        for (let i = fromIndex; i < toIndex; i++) {
+                            files[i] = files[i + 1];
+                        }
+                    } else {
+                        for (let i = fromIndex; i > toIndex; i--) {
+                            files[i] = files[i - 1];
+                        }
+                    }
+                    
+                    files[toIndex] = temp;
+                    updateFileList();
+                }
+                
+                return false;
+            }
+            
+            function handleDragEnd() {
+                this.style.opacity = '1';
+            }
+            
+            // 更新按钮状态
+            function updateButtons() {
+                if (files.length > 0) {
+                    mergeBtn.disabled = false;
+                    clearBtn.disabled = false;
+                } else {
+                    mergeBtn.disabled = true;
+                    clearBtn.disabled = true;
+                }
+            }
+            
+            // 清除所有文件
+            clearBtn.addEventListener('click', () => {
+                files = [];
+                updateFileList();
+                updateButtons();
+                hideStatus();
+            });
+            
+            // 合并PDF文件
+            mergeBtn.addEventListener('click', async () => {
+                if (files.length === 0) return;
+                
+                try {
+                    mergeBtn.disabled = true;
+                    clearBtn.disabled = true;
+                    progressBar.style.display = 'block';
+                    hideStatus();
+                    
+                    // 创建新的PDF文档
+                    const { PDFDocument } = PDFLib;
+                    const mergedPdf = await PDFDocument.create();
+                    
+                    // 逐个处理文件
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        
+                        // 更新进度条
+                        progressBar.value = (i / files.length) * 90;
+                        
+                        // 读取PDF文件
+                        const fileArrayBuffer = await readFileAsArrayBuffer(file);
+                        const pdfDoc = await PDFDocument.load(fileArrayBuffer);
+                        
+                        // 复制所有页面到新文档
+                        const pages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
+                        pages.forEach(page => {
+                            mergedPdf.addPage(page);
+                        });
+                    }
+                    
+                    // 保存合并后的PDF
+                    progressBar.value = 95;
+                    const mergedPdfBytes = await mergedPdf.save();
+                    
+                    // 下载文件
+                    const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+                    saveAs(blob, `合并的发票_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`);
+                    
+                    progressBar.value = 100;
+                    showStatus(`成功合并 ${files.length} 个PDF文件！`, 'success');
+                } catch (error) {
+                    console.error('PDF合并错误:', error);
+                    showStatus('合并PDF时发生错误: ' + error.message, 'error');
+                } finally {
+                    setTimeout(() => {
+                        progressBar.style.display = 'none';
+                        progressBar.value = 0;
+                        mergeBtn.disabled = false;
+                        clearBtn.disabled = false;
+                    }, 1000);
+                }
+            });
+            
+            // 读取文件为ArrayBuffer
+            function readFileAsArrayBuffer(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsArrayBuffer(file);
+                });
+            }
+            
+            // 显示状态信息
+            function showStatus(message, type) {
+                statusDiv.textContent = message;
+                statusDiv.className = 'status ' + type;
+                statusDiv.style.display = 'block';
+            }
+            
+            // 隐藏状态信息
+            function hideStatus() {
+                statusDiv.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
