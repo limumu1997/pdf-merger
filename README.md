@@ -22,6 +22,8 @@
 3. 在预览区拖动调整顺序、点 ↻ 旋转需要的页
 4. 点击「合并 PDF 文件」，自动下载合并结果
 
+![alt text](image.png)
+
 ## 技术
 
 - [pdf-lib](https://github.com/Hopding/pdf-lib) — PDF 合并与排版
